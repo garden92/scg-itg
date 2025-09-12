@@ -1,5 +1,6 @@
 package com.kt.kol.gateway.itg.util;
 
+
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -30,6 +31,11 @@ import com.kt.kol.gateway.itg.model.RequestStdVO;
 import com.kt.kol.gateway.itg.model.ResponseStdVO;
 import com.kt.kol.gateway.itg.properties.HeaderConstants;
 import com.kt.kol.gateway.itg.template.SoapTemplateManager;
+import com.kt.kol.gateway.itg.metrics.PerformanceMetrics;
+import com.kt.kol.common.constant.SoapConstants;
+import com.kt.kol.common.constant.ServiceConstants;
+import com.kt.kol.common.enums.ResponseType;
+import io.micrometer.core.instrument.Timer;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +51,7 @@ public class SoapConverter {
     private final ObjectMapper objectMapper;
     private final XmlMapper xmlMapper;
     private final SoapTemplateManager soapTemplateManager;
+    private final PerformanceMetrics performanceMetrics;
 
     // 매개변수 trtBaseInfoDTO -> svcRequestInfoDTO 로 변경
     public String convertToSoap(ServerWebExchange exchange, RequestStdVO requestStdVO) {
@@ -59,115 +66,132 @@ public class SoapConverter {
             String jsonString = objectMapper.writeValueAsString(node);
             return jsonString;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to convert SOAP to REST", e);
+            throw new RuntimeException(ServiceConstants.ERROR_CONVERSION_FAILED, e);
         }
     }
 
     public ResponseStdVO convertToStdVO(String soapResponse) {
+        Timer.Sample sample = performanceMetrics.startXmlConversion();
         try {
-	    log.info("soapResponse ::: {}", soapResponse);
-            InputStream inputStream = new ByteArrayInputStream(soapResponse.getBytes(StandardCharsets.UTF_8));
-            JsonNode jsonNode = xmlMapper.readTree(inputStream);
+            log.info("soapResponse ::: {}", soapResponse);
+            
+            // 최적화: byte[] 직접 사용으로 InputStream 생성 오버헤드 제거
+            byte[] responseBytes = soapResponse.getBytes(StandardCharsets.UTF_8);
+            JsonNode jsonNode = xmlMapper.readTree(responseBytes);
 
             final String responseType = this.extractResponseType(jsonNode);
 
-            if ("I".equals(responseType)) {
+            ResponseStdVO result;
+            ResponseType responseTypeEnum = ResponseType.fromCodeOrDefault(responseType);
+            
+            if (responseTypeEnum.isSuccess()) {
                 JsonNode responseData = extractResponseData(jsonNode);
-                return ResponseStdVO.success(responseData);
-            } else if ("E".equals(responseType)) {
+                result = ResponseStdVO.success(responseData);
+            } else if (responseTypeEnum.isBusinessError()) {
                 JsonNode commonHeader = extractCommonHeader(jsonNode);
-                return ResponseStdVO.businessError(
-                        commonHeader.path("responseCode").asText(),
-                        commonHeader.path("responseTitle").asText(),
-                        commonHeader.path("responseBasc").asText(),
-                        commonHeader.path("responseDtal").asText(),
-                        commonHeader.path("responseSystem").asText());
+                result = ResponseStdVO.businessError(
+                        commonHeader.path(SoapConstants.RESPONSE_CODE).asText(),
+                        commonHeader.path(SoapConstants.RESPONSE_TITLE).asText(),
+                        commonHeader.path(SoapConstants.RESPONSE_BASC).asText(),
+                        commonHeader.path(SoapConstants.RESPONSE_DTAL).asText(),
+                        commonHeader.path(SoapConstants.RESPONSE_SYSTEM).asText());
             } else {
                 JsonNode commonHeader = extractCommonHeader(jsonNode);
-                return ResponseStdVO.systemError(
-                        commonHeader.path("responseCode").asText(),
-                        commonHeader.path("responseTitle").asText(),
-                        commonHeader.path("responseBasc").asText(),
-                        commonHeader.path("responseDtal").asText(),
-                        commonHeader.path("responseSystem").asText());
+                result = ResponseStdVO.systemError(
+                        commonHeader.path(SoapConstants.RESPONSE_CODE).asText(),
+                        commonHeader.path(SoapConstants.RESPONSE_TITLE).asText(),
+                        commonHeader.path(SoapConstants.RESPONSE_BASC).asText(),
+                        commonHeader.path(SoapConstants.RESPONSE_DTAL).asText(),
+                        commonHeader.path(SoapConstants.RESPONSE_SYSTEM).asText());
             }
+            
+            performanceMetrics.recordXmlConversion(sample);
+            return result;
+            
         } catch (Exception e) {
+            // 최적화: 예외 메시지 간소화로 오버헤드 감소
+            log.error("SOAP response conversion failed", e);
+            performanceMetrics.recordXmlConversion(sample); // 실패해도 시간 기록
             return ResponseStdVO.systemError(
-                    "KOL_SYS_ERR",
-                    e.getMessage(),
+                    SoapConstants.DEFAULT_SYSTEM_ERROR_CODE,
+                    SoapConstants.ERROR_RESPONSE_CONVERSION_FAILED,
                     "",
                     "",
-                    "KOL");
+                    SoapConstants.DEFAULT_SYSTEM_ERROR_SYSTEM);
         }
     }
 
     private String extractResponseType(JsonNode responseNode) {
         // commonHeader의 responseType 추출
         String responseType = responseNode
-                .path("Header")
-                .path("commonHeader")
-                .path("responseType")
-                // .path("responseType")
+                .path(SoapConstants.HEADER)
+                .path(SoapConstants.COMMON_HEADER)
+                .path(SoapConstants.RESPONSE_TYPE)
                 .asText();
 
-        return responseType.isEmpty() ? "I" : responseType; // 없으면 기본값 "I" 반환
+        return responseType.isEmpty() ? SoapConstants.DEFAULT_SUCCESS_TYPE : responseType;
     }
 
     private JsonNode extractCommonHeader(JsonNode responseNode) {
         return responseNode
-                // .path("Envelope")
-                .path("Header")
-                .path("commonHeader");
-        // .path("service_response");
-
+                .path(SoapConstants.HEADER)
+                .path(SoapConstants.COMMON_HEADER);
     }
 
     private JsonNode extractResponseData(JsonNode responseNode) {
         return responseNode
-                // .path("Envelope")
-                .path("Body");
-        // .path("service_response");
+                .path(SoapConstants.BODY);
     }
 
     /**
      * 매개변수 TrtBaseInfoDTO -> SvcRequestInfoDTO 로 변경
      * 매개변수 ServerWebExchange exchange 추가 - 헤더정보 읽어야해서 필요
+     * 최적화: 헤더 접근 횟수 최소화 및 Map 생성 개선
      */
     private CommonHeader extractHeaders(SvcRequestInfoDTO svcRequestInfoDTO, ServerWebExchange exchange) {
         HttpHeaders headers = exchange.getRequest().getHeaders();
         
-        //Options Map 추출
-        Map<String, String> options = new HashMap<>();
-        if(svcRequestInfoDTO.options() != null) {
-            options = svcRequestInfoDTO.options();
+        // 최적화: 헤더 값들을 한 번에 추출하여 반복 접근 최소화
+        String globalNo = headers.getFirst(HeaderConstants.GLOBAL_NO);
+        String userId = headers.getFirst(HeaderConstants.USER_ID);
+        String sourceId = headers.getFirst(HeaderConstants.SOURCE_ID);
+        String cmpnCd = headers.getFirst(HeaderConstants.CMPN_CD);
+        String lgDateTime = headers.getFirst(HeaderConstants.LOG_DATETIME);
+        
+        // 최적화: Options Map 처리 개선 - null 체크 최소화
+        Map<String, String> options = svcRequestInfoDTO.options() != null 
+            ? svcRequestInfoDTO.options() 
+            : Map.of(); // 빈 Map 사용으로 NPE 방지
+
+        // 최적화: lockTimeSt 계산 로직 간소화
+        String lockId = options.getOrDefault(KosHeaderConstants.LOCK_ID, "");
+        String lockTimeSt = "";
+        if (!lockId.isEmpty()) {
+            lockTimeSt = options.getOrDefault(KosHeaderConstants.LOCK_TIME_ST, "");
+            if (lockTimeSt.isEmpty()) {
+                lockTimeSt = DateUtil.Date_yyyyMMddHHmmssSSS();
+            }
         }
 
         return CommonHeader.builder()
                 .appName(svcRequestInfoDTO.appName())
                 .svcName(svcRequestInfoDTO.svcName())
                 .fnName(svcRequestInfoDTO.fnName())
-                .globalNo(headers.getFirst(HeaderConstants.GLOBAL_NO))
+                .globalNo(globalNo)
                 .chnlType(HeaderConstants.KN_CHNL_TYPE)
                 .trFlag(HeaderConstants.COMM_TR_FLAG_THROW)
                 .trDate(LocalDate.now().format(DateTimeFormatter.ofPattern("YYYYMMdd")))
                 .trTime(LocalTime.now().format(DateTimeFormatter.ofPattern("hhmmssSSS")))
                 .clntIp(nodeIp)
-                //.userId(HeaderConstants.KN_USER_ID)   KN대표ID --> 채널에서입력된 user_id 로 변경.  20250808
-                .userId(headers.getFirst(HeaderConstants.USER_ID))
+                .userId(userId)
                 .realUserId(HeaderConstants.KN_USER_ID)
                 .orgId(HeaderConstants.KN_ORG_ID)
-                .srcId(headers.getFirst(HeaderConstants.SOURCE_ID))
-                .cmpnCd(headers.getFirst(HeaderConstants.CMPN_CD))
-                .lgDateTime(headers.getFirst(HeaderConstants.LOG_DATETIME))
+                .srcId(sourceId)
+                .cmpnCd(cmpnCd)
+                .lgDateTime(lgDateTime)
                 .lockType(options.getOrDefault(KosHeaderConstants.LOCK_TYPE, ""))
-                .lockId(options.getOrDefault(KosHeaderConstants.LOCK_ID, ""))
-                .lockTimeSt(
-                            !"".equals(options.getOrDefault(KosHeaderConstants.LOCK_ID, ""))             //lockId 가 입력된 경우 
-                                ? (!"".equals(options.getOrDefault(KosHeaderConstants.LOCK_TIME_ST, ""))
-                                    ? options.get(KosHeaderConstants.LOCK_TIME_ST)                                     //입력된 lockTimeSt 사용
-                                    : DateUtil.Date_yyyyMMddHHmmssSSS())                                                    //입력된 lockTimeSt 가 없으면 server date 사용
-                                : ""                                                                                        //lockId 가 입력 되지 않았으면 empty string
-                            )
+                .lockId(lockId)
+                .lockTimeSt(lockTimeSt)
                 .tokenId(options.getOrDefault(KosHeaderConstants.TOKEN_ID, ""))
                 .businessKey(options.getOrDefault(KosHeaderConstants.BUSINESS_KEY, ""))
                 .build();
@@ -184,12 +208,12 @@ public class SoapConverter {
             JsonNode jsonNode = requestStdVO.data();
             JsonNode bizHeaderJson = objectMapper.valueToTree(bizHeader);
             ObjectNode mergedJson = objectMapper.createObjectNode();
-            mergedJson.set("bizHeader", bizHeaderJson);
+            mergedJson.set(SoapConstants.BIZ_HEADER, bizHeaderJson);
             mergedJson.setAll((ObjectNode) jsonNode);
-            final String xmlContent = xmlMapper.writer().withRootName("service_request").writeValueAsString(mergedJson);
+            final String xmlContent = xmlMapper.writer().withRootName(SoapConstants.SERVICE_REQUEST).writeValueAsString(mergedJson);
             return String.format(JaxbXmlSerializer.toXMLString(soapEnvelope), xmlContent);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to convert REST to SOAP", e);
+            throw new RuntimeException(ServiceConstants.ERROR_CONVERSION_FAILED, e);
         }
     }
 
@@ -209,6 +233,7 @@ public class SoapConverter {
      * 기존 대비 60% 성능 향상
      */
     private String convertToXmlOptimized(CommonHeader commonHeader, RequestStdVO requestStdVO) {
+        Timer.Sample sample = performanceMetrics.startTemplateGeneration();
         try {
             BizHeader bizHeader = new BizHeader();
             bizHeader.setOrderId(requestStdVO.svcRequestInfoDTO().oderId());
@@ -218,15 +243,18 @@ public class SoapConverter {
             JsonNode jsonNode = requestStdVO.data();
             JsonNode bizHeaderJson = objectMapper.valueToTree(bizHeader);
             ObjectNode mergedJson = objectMapper.createObjectNode();
-            mergedJson.set("bizHeader", bizHeaderJson);
+            mergedJson.set(SoapConstants.BIZ_HEADER, bizHeaderJson);
             mergedJson.setAll((ObjectNode) jsonNode);
             
-            final String xmlContent = xmlMapper.writer().withRootName("service_request").writeValueAsString(mergedJson);
+            final String xmlContent = xmlMapper.writer().withRootName(SoapConstants.SERVICE_REQUEST).writeValueAsString(mergedJson);
             
             // 템플릿 매니저 사용으로 성능 향상
-            return soapTemplateManager.generateSoapXml(commonHeader, xmlContent);
+            String result = soapTemplateManager.generateSoapXml(commonHeader, xmlContent);
+            performanceMetrics.recordTemplateGeneration(sample);
+            return result;
             
         } catch (Exception e) {
+            performanceMetrics.recordTemplateGeneration(sample);
             log.error("Failed to convert with template, falling back to JAXB", e);
             // 폴백: 기존 방식 사용
             SoapEnvelope soapEnvelope = createSoapEnvelope(commonHeader);

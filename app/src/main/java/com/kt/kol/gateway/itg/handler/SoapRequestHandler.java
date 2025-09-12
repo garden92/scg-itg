@@ -2,11 +2,17 @@ package com.kt.kol.gateway.itg.handler;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
+import org.springframework.core.convert.ConversionException;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -24,6 +30,13 @@ import com.kt.kol.gateway.itg.properties.HeaderConstants;
 import com.kt.kol.gateway.itg.properties.SoapServiceProperies;
 import com.kt.kol.gateway.itg.strategy.EndpointStrategyResolver;
 import com.kt.kol.gateway.itg.util.SoapConverter;
+import com.kt.kol.gateway.itg.metrics.PerformanceMetrics;
+import com.kt.kol.common.constant.MediaTypes;
+import com.kt.kol.gateway.itg.service.RequestValidationService;
+import com.kt.kol.gateway.itg.service.ResponseWriterService;
+import com.kt.kol.gateway.itg.service.SoapProcessingService;
+import io.micrometer.core.instrument.Timer;
+import org.springframework.beans.factory.annotation.Value;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,17 +50,64 @@ public class SoapRequestHandler {
 
     private final WebClient webClient;
     private final SoapConverter soapConverter;
-    private final ErrorHandler errorHandler;
+
     private final SoapServiceProperies soapClientProperies;
     private final ObjectMapper objectMapper;
     private final EndpointStrategyResolver endpointStrategyResolver;
+    private final PerformanceMetrics performanceMetrics;
+    
+    // 새로운 서비스 추가
+    private final RequestValidationService validationService;
+    private final SoapProcessingService processingService;
+    private final ResponseWriterService writerService;
+    
+    // 기능 플래그 - 점진적 마이그레이션을 위한 설정
+    @Value("${feature.use-optimized-handler:false}")
+    private boolean useOptimizedHandler;
 
+    /**
+     * 통합된 핸들러 - 기능 플래그에 따라 새로운 서비스 또는 기존 로직 사용
+     */
     public Mono<Void> handleRequest(ServerWebExchange exchange) {
-        return Mono.just(exchange)
-                .flatMap(this::extractRequestBody)
+        if (useOptimizedHandler) {
+            return handleRequestOptimized(exchange);
+        } else {
+            return handleRequestLegacy(exchange);
+        }
+    }
+    
+    /**
+     * 최적화된 핸들러 - 새로운 서비스 사용
+     */
+    private Mono<Void> handleRequestOptimized(ServerWebExchange exchange) {
+        Timer.Sample sample = performanceMetrics.startSoapRequest();
+        
+        return validationService.extractAndValidateRequest(exchange)
+                .flatMap(request -> processingService.processSoapRequest(exchange, request))
+                .flatMap(response -> writerService.writeResponse(exchange, response))
+                .doOnSuccess(result -> performanceMetrics.recordSoapSuccess(sample))
+                .onErrorResume(error -> {
+                    String errorType = error.getClass().getSimpleName();
+                    performanceMetrics.recordSoapError(sample, errorType);
+                    return handleError(exchange, error);
+                });
+    }
+    
+    /**
+     * 기존 핸들러 로직 - 하위 호환성 유지
+     */
+    private Mono<Void> handleRequestLegacy(ServerWebExchange exchange) {
+        Timer.Sample sample = performanceMetrics.startSoapRequest();
+        
+        return extractRequestBody(exchange)
                 .flatMap(body -> processRequest(exchange, body))
                 .flatMap(response -> writeResponse(exchange, response))
-                .onErrorResume(error -> errorHandler.handleError(exchange, error));
+                .doOnSuccess(result -> performanceMetrics.recordSoapSuccess(sample))
+                .onErrorResume(error -> {
+                    String errorType = error.getClass().getSimpleName();
+                    performanceMetrics.recordSoapError(sample, errorType);
+                    return handleError(exchange, error);
+                });
     }
 
     private Mono<RequestStdVO> extractRequestBody(ServerWebExchange exchange) {
@@ -111,18 +171,44 @@ public class SoapRequestHandler {
     }
 
     /**
-     * @deprecated Header 가 아닌 trtBaseInfo 로 변경
+     * 에러 처리 메소드
      */
-    // @Deprecated
-    // private String determineEndpoint(ServerWebExchange exchange) {
-    //     HttpHeaders headers = exchange.getRequest().getHeaders();
-    //     String serviceType = headers.getFirst(HeaderConstants.FN_NAME);
-
-    //     // 비즈니스 로직에 따른 엔드포인트 결정
-    //     if ("service".equals(serviceType)) {
-    //         return soapClientProperies.getPoEndPoint();
-    //     } else {
-    //         return soapClientProperies.getEsbEndPoint();
-    //     }
-    // }
+    private Mono<Void> handleError(ServerWebExchange exchange, Throwable error) {
+        log.error("Error processing SOAP request", error);
+        
+        // HTTP 상태 코드 설정
+        HttpStatus httpStatus = determineHttpStatus(error);
+        exchange.getResponse().setStatusCode(httpStatus);
+        exchange.getResponse().getHeaders().add(MediaTypes.HEADER_CONTENT_TYPE, MediaTypes.APPLICATION_JSON_UTF8);
+        
+        // 에러 응답 생성
+        try {
+            String errorJson = createErrorJson(error);
+            DataBuffer buffer = exchange.getResponse().bufferFactory()
+                    .wrap(errorJson.getBytes(StandardCharsets.UTF_8));
+            return exchange.getResponse().writeWith(Mono.just(buffer));
+        } catch (Exception e) {
+            log.error("Failed to create error response", e);
+            return exchange.getResponse().setComplete();
+        }
+    }
+    
+    private HttpStatus determineHttpStatus(Throwable error) {
+        if (error instanceof InvalidRequestException) {
+            return HttpStatus.BAD_REQUEST;
+        } else if (error instanceof SoapServiceException) {
+            return HttpStatus.BAD_GATEWAY;
+        } else if (error instanceof ConversionException) {
+            return HttpStatus.UNPROCESSABLE_ENTITY;
+        }
+        return HttpStatus.INTERNAL_SERVER_ERROR;
+    }
+    
+    private String createErrorJson(Throwable error) throws Exception {
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("error", error.getClass().getSimpleName());
+        errorResponse.put("message", error.getMessage());
+        errorResponse.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        return objectMapper.writeValueAsString(errorResponse);
+    }
 }

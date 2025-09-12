@@ -1,7 +1,5 @@
 package com.kt.kol.gateway.itg.route;
 
-import java.time.Duration;
-
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.route.RouteLocator;
@@ -15,7 +13,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 
 import com.kt.kol.gateway.itg.handler.SoapRequestHandler;
-import com.kt.kol.gateway.itg.properties.RouteProperties;
+
+import com.kt.kol.common.constant.RouteConstants;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,20 +25,19 @@ import reactor.core.publisher.Mono;
 @Slf4j
 public class ESBRouteLocator {
 
-	private final RouteProperties routeProperties;
 	private final SoapRequestHandler soapRequestHandler;
 
 	@Bean
 	public RouteLocator customRouteLocator(RouteLocatorBuilder builder) {
 		return builder.routes()
-				.route("rest-soap-po-route", r -> r
-						.path("/SoapDynamicGateway")
+				.route(RouteConstants.REST_SOAP_PO_ROUTE, r -> r
+						.path(RouteConstants.SOAP_DYNAMIC_GATEWAY_PATH)
 						.filters(f -> applyCommonFilters(f))
-						.uri("no://op"))
-				.route("rest-soap-esb-route", r -> r
-						.path("/SoapGateway")
+						.uri(RouteConstants.NO_OP_URI))
+				.route(RouteConstants.REST_SOAP_ESB_ROUTE, r -> r
+						.path(RouteConstants.SOAP_GATEWAY_PATH)
 						.filters(f -> applyCommonFilters(f))
-						.uri("no://op"))
+						.uri(RouteConstants.NO_OP_URI))
 				.build();
 	}
 
@@ -48,13 +46,7 @@ public class ESBRouteLocator {
 				// .requestRateLimiter(
 				// config ->
 				// config.setRateLimiter(redisRateLimiter()).setKeyResolver(userKeyResolver()))
-				.filter((exchange, chain) -> soapRequestHandler.handleRequest(exchange))
-				.retry(config -> config
-						.setRetries(routeProperties.getRetries())
-						.setBackoff(Duration.ofMillis(routeProperties.getBackoffDelay()),
-								Duration.ofMillis(routeProperties.getMaxBackoffDelay()),
-								(int) routeProperties.getBackoffFactor(),
-								true));
+				.filter((exchange, chain) -> soapRequestHandler.handleRequest(exchange));
 	}
 
 	// @Bean

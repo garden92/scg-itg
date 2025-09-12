@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 
 import com.kt.kol.gateway.itg.exception.InvalidRequestException;
+import com.kt.kol.common.constant.ServiceConstants;
 
 import reactor.core.publisher.Mono;
 
@@ -18,7 +19,7 @@ public class GlobalRequestValidationFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         if (!exchange.getRequest().getHeaders().getContentType()
                 .includes(MediaType.APPLICATION_JSON)) {
-            return Mono.error(new InvalidRequestException("Content-Type must be application/json"));
+            return Mono.error(new InvalidRequestException(ServiceConstants.VALIDATION_INVALID_CONTENT_TYPE));
         }
         return chain.filter(exchange);
     }

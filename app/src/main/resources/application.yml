@@ -1,6 +1,10 @@
 spring:
   application:
     name: kol-itg-gateway
+
+# 기능 플래그 설정 - 점진적 마이그레이션
+feature:
+  use-optimized-handler: false    # 새로운 서비스 사용 여부 (기본: false)
   profiles:
     active: local
   # data: REDIS 5월에 구축 되면 사용
@@ -9,6 +13,13 @@ spring:
   #     port: 6379
 server:
   port: 8080
+
+# WebClient 최적화 설정 - 외부 시스템 80초 처리 대응
+webclient:
+  connection-timeout: 5000    # 연결 설정: 5초 (빠른 실패)
+  read-timeout: 95000         # 응답 대기: 95초 (80초 + 15초 버퍼)
+  write-timeout: 10000        # 요청 전송: 10초
+
 
 kubernetes:
   node:
@@ -30,10 +41,15 @@ management:
       enabled: true
 ---
 # Profile - local
+# Profile - local
 spring:
   config:
     activate:
       on-profile: local
+
+# local 환경에서는 새로운 서비스 활성화 (테스트용)
+feature:
+  use-optimized-handler: true
   devtools:
     restart:
       enabled: true
@@ -67,6 +83,11 @@ logging:
     name: itg-gw
     path: /var/log
 
+webclient:
+  connection-timeout: 3000    # local: 빠른 개발 피드백
+  read-timeout: 100000        # local: 디버깅 시 충분한 시간
+  write-timeout: 15000
+
 soap:
   service:
     ord-po-end-point: http://10.217.136.217:7100/SoapDynamicGateway
@@ -77,10 +98,17 @@ soap:
 
 ---
 # Profile - dev
+# Profile - dev
 spring:
   config:
     activate:
       on-profile: dev
+
+# 개발 환경 WebClient 설정 최적화  
+webclient:
+  connection-timeout: 5000    # dev: 연결 설정 5초
+  read-timeout: 90000         # dev: 80초 처리 + 10초 버퍼
+  write-timeout: 12000
 
 resilience4j.circuitbreaker:
   configs:
@@ -116,10 +144,17 @@ logging:
 
 ---
 # Profile - sit
+# Profile - sit  
 spring:
   config:
     activate:
       on-profile: sit
+
+# SIT 환경 WebClient 설정 최적화
+webclient:
+  connection-timeout: 5000    # sit: 연결 설정 5초
+  read-timeout: 85000         # sit: 80초 처리 + 5초 버퍼 (성능 테스트)
+  write-timeout: 8000
 
 resilience4j.circuitbreaker:
   configs:
@@ -155,10 +190,17 @@ logging:
 
 ---
 # Profile - prd
+# Profile - prd
 spring:
   config:
     activate:
       on-profile: prd
+
+# 운영 환경 WebClient 설정 최적화  
+webclient:
+  connection-timeout: 5000    # prd: 연결 설정 5초
+  read-timeout: 95000         # prd: 80초 처리 + 15초 버퍼 (최대 안정성)
+  write-timeout: 5000
 
 resilience4j.circuitbreaker:
   configs:

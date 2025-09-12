@@ -11,11 +11,7 @@ import lombok.Setter;
 @Configuration
 @ConfigurationProperties(prefix = "webclient")
 public class WebClientProperties {
-    private long timeout = 80000;
-    private long readTimeout = 80000;
-    private long writeTimeout = 80000;
-    private int retries = 3;
-    private long backoffDelay = 1000;
-    private long maxBackoffDelay = 5000;
-    private double backoffFactor = 2.0;
+    private long connectionTimeout = 5000;    // 연결 설정 타임아웃
+    private long readTimeout = 95000;         // 응답 대기 타임아웃
+    private long writeTimeout = 10000;        // 요청 전송 타임아웃
 }

@@ -1,0 +1,193 @@
+spring:
+  application:
+    name: kol-itg-gateway
+  profiles:
+    active: local
+  # data: REDIS 5월에 구축 되면 사용
+  #   redis:
+  #     host: localhost
+  #     port: 6379
+server:
+  port: 8080
+
+kubernetes:
+  node:
+    ip: ${NODE_IP}
+    name: ${NODE_NAME}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    shutdown:
+      enabled: true
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
+---
+# Profile - local
+spring:
+  config:
+    activate:
+      on-profile: local
+  devtools:
+    restart:
+      enabled: true
+server:
+  port: 8001
+
+resilience4j.circuitbreaker:
+  configs:
+    default: #https://resilience4j.readme.io/docs/circuitbreaker 참고
+      #최소 10건이 요청되었을 때 60% 이상(6건)의 요청이 오류가 발생하거나, 느린 요청일 경우 CircuitBreaker가 발동.
+      registerHealthIndicator: true
+      slidingWindowType: COUNT_BASED
+      slidingWindowSize: 10 # {통계건수}
+      minimumNumberOfCalls: 10 # {최소요청횟수}
+      failureRateThreshold: 60 # {실패율}
+      slowCallRateThreshold: 60 # {느린요청비율}
+      slowCallDurationThreshold: 3000 # {느린요청으로 간주할 시간}
+      permittedNumberOfCallsInHalfOpenState: 2
+      waitDurationInOpenState: 5s # {Circuit Breaker유지시간}
+      eventConsumerBufferSize: 10
+  instances:
+    testcirguitbreaker:
+      baseConfig: default
+
+    # redis:
+    #   enabled: true
+
+logging:
+  config: classpath:logback-spring-dev.xml
+  file:
+    name: itg-gw
+    path: /var/log
+
+soap:
+  service:
+    ord-po-end-point: http://10.217.136.217:7100/SoapDynamicGateway
+    ord-esb-end-point: http://10.217.136.217:7100/SoapGateway
+    crm-po-end-point: http://10.217.136.217:7100/SoapDynamicGateway
+    crm-esb-end-point: http://10.217.136.127:8001/SoapGateway
+    stub-end-point: http://localhost:8080/perf/stub/soap-perf-stub
+
+---
+# Profile - dev
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+resilience4j.circuitbreaker:
+  configs:
+    default: #https://resilience4j.readme.io/docs/circuitbreaker 참고
+      #최소 10건이 요청되었을 때 60% 이상(6건)의 요청이 오류가 발생하거나, 느린 요청일 경우 CircuitBreaker가 발동.
+      registerHealthIndicator: true
+      slidingWindowType: COUNT_BASED
+      slidingWindowSize: 10 # {통계건수}
+      minimumNumberOfCalls: 10 # {최소요청횟수}
+      failureRateThreshold: 60 # {실패율}
+      slowCallRateThreshold: 60 # {느린요청비율}
+      slowCallDurationThreshold: 3000 # {느린요청으로 간주할 시간}
+      permittedNumberOfCallsInHalfOpenState: 2
+      waitDurationInOpenState: 5s # {Circuit Breaker유지시간}
+      eventConsumerBufferSize: 10
+  instances:
+    testcirguitbreaker:
+      baseConfig: default
+
+soap:
+  service:
+    ord-po-end-point: ${ORD_PO_END_POINT_DEV}
+    ord-esb-end-point: ${ORD_ESB_END_POINT_DEV}
+    crm-po-end-point: ${CRM_PO_END_POINT_DEV}
+    crm-esb-end-point: ${CRM_ESB_END_POINT_DEV}
+    stub-end-point: http://perf-stub-api/soap-perf-stub
+
+logging:
+  config: classpath:logback-spring-dev.xml
+  file:
+    name: itg-gw
+    path: /var/log
+
+---
+# Profile - sit
+spring:
+  config:
+    activate:
+      on-profile: sit
+
+resilience4j.circuitbreaker:
+  configs:
+    default: #https://resilience4j.readme.io/docs/circuitbreaker 참고
+      #최소 10건이 요청되었을 때 60% 이상(6건)의 요청이 오류가 발생하거나, 느린 요청일 경우 CircuitBreaker가 발동.
+      registerHealthIndicator: true
+      slidingWindowType: COUNT_BASED
+      slidingWindowSize: 10 # {통계건수}
+      minimumNumberOfCalls: 10 # {최소요청횟수}
+      failureRateThreshold: 60 # {실패율}
+      slowCallRateThreshold: 60 # {느린요청비율}
+      slowCallDurationThreshold: 3000 # {느린요청으로 간주할 시간}
+      permittedNumberOfCallsInHalfOpenState: 2
+      waitDurationInOpenState: 5s # {Circuit Breaker유지시간}
+      eventConsumerBufferSize: 10
+  instances:
+    testcirguitbreaker:
+      baseConfig: default
+
+soap:
+  service:
+    ord-po-end-point: ${ORD_PO_END_POINT_SIT}
+    ord-esb-end-point: ${ORD_ESB_END_POINT_SIT}
+    crm-po-end-point: ${CRM_PO_END_POINT_SIT}
+    crm-esb-end-point: ${CRM_ESB_END_POINT_SIT}
+    stub-end-point: http://perf-stub-api/soap-perf-stub
+
+logging:
+  config: classpath:logback-spring-prd.xml
+  file:
+    name: itg-gw
+    path: /var/log
+
+---
+# Profile - prd
+spring:
+  config:
+    activate:
+      on-profile: prd
+
+resilience4j.circuitbreaker:
+  configs:
+    default: #https://resilience4j.readme.io/docs/circuitbreaker 참고
+      #최소 10건이 요청되었을 때 60% 이상(6건)의 요청이 오류가 발생하거나, 느린 요청일 경우 CircuitBreaker가 발동.
+      registerHealthIndicator: true
+      slidingWindowType: COUNT_BASED
+      slidingWindowSize: 10 # {통계건수}
+      minimumNumberOfCalls: 10 # {최소요청횟수}
+      failureRateThreshold: 60 # {실패율}
+      slowCallRateThreshold: 60 # {느린요청비율}
+      slowCallDurationThreshold: 3000 # {느린요청으로 간주할 시간}
+      permittedNumberOfCallsInHalfOpenState: 2
+      waitDurationInOpenState: 5s # {Circuit Breaker유지시간}
+      eventConsumerBufferSize: 10
+  instances:
+    testcirguitbreaker:
+      baseConfig: default
+
+soap:
+  service:
+    ord-po-end-point: ${ORD_PO_END_POINT_PRD}
+    ord-esb-end-point: ${ORD_ESB_END_POINT_PRD}
+    crm-po-end-point: ${CRM_PO_END_POINT_PRD}
+    crm-esb-end-point: ${CRM_ESB_END_POINT_PRD}
+    stub-end-point: http://perf-stub-api/soap-perf-stub
+
+logging:
+  config: classpath:logback-spring-prd.xml
+  file:
+    name: itg-gw
+    path: /var/log

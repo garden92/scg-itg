@@ -21,7 +21,6 @@ import org.springframework.web.server.ServerWebExchange;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kt.kol.common.model.SvcRequestInfoDTO;
-import com.kt.kol.common.util.DomainConstants;
 import com.kt.kol.gateway.itg.exception.InvalidRequestException;
 import com.kt.kol.gateway.itg.exception.SoapServiceException;
 import com.kt.kol.gateway.itg.model.RequestStdVO;
@@ -31,6 +30,7 @@ import com.kt.kol.gateway.itg.properties.SoapServiceProperies;
 import com.kt.kol.gateway.itg.strategy.EndpointStrategyResolver;
 import com.kt.kol.gateway.itg.util.SoapConverter;
 import com.kt.kol.gateway.itg.metrics.PerformanceMetrics;
+import com.kt.kol.common.constant.DomainConstants;
 import com.kt.kol.common.constant.MediaTypes;
 import com.kt.kol.gateway.itg.service.RequestValidationService;
 import com.kt.kol.gateway.itg.service.ResponseWriterService;
@@ -55,12 +55,12 @@ public class SoapRequestHandler {
     private final ObjectMapper objectMapper;
     private final EndpointStrategyResolver endpointStrategyResolver;
     private final PerformanceMetrics performanceMetrics;
-    
+
     // 새로운 서비스 추가
     private final RequestValidationService validationService;
     private final SoapProcessingService processingService;
     private final ResponseWriterService writerService;
-    
+
     // 기능 플래그 - 점진적 마이그레이션을 위한 설정
     @Value("${feature.use-optimized-handler:false}")
     private boolean useOptimizedHandler;
@@ -75,13 +75,13 @@ public class SoapRequestHandler {
             return handleRequestLegacy(exchange);
         }
     }
-    
+
     /**
      * 최적화된 핸들러 - 새로운 서비스 사용
      */
     private Mono<Void> handleRequestOptimized(ServerWebExchange exchange) {
         Timer.Sample sample = performanceMetrics.startSoapRequest();
-        
+
         return validationService.extractAndValidateRequest(exchange)
                 .flatMap(request -> processingService.processSoapRequest(exchange, request))
                 .flatMap(response -> writerService.writeResponse(exchange, response))
@@ -92,13 +92,13 @@ public class SoapRequestHandler {
                     return handleError(exchange, error);
                 });
     }
-    
+
     /**
      * 기존 핸들러 로직 - 하위 호환성 유지
      */
     private Mono<Void> handleRequestLegacy(ServerWebExchange exchange) {
         Timer.Sample sample = performanceMetrics.startSoapRequest();
-        
+
         return extractRequestBody(exchange)
                 .flatMap(body -> processRequest(exchange, body))
                 .flatMap(response -> writeResponse(exchange, response))
@@ -135,9 +135,9 @@ public class SoapRequestHandler {
             String soapRequest = soapConverter.convertToSoap(exchange, requestStdVO);
             log.info("::soapRequest:: {}", soapRequest);
             String endpoint = endpointStrategyResolver.resolveEndpoint(
-                requestStdVO.svcRequestInfoDTO(), 
-                exchange.getRequest().getHeaders());
-                
+                    requestStdVO.svcRequestInfoDTO(),
+                    exchange.getRequest().getHeaders());
+
             WebClient.RequestBodySpec requestSpec = webClient.post().uri(endpoint);
             if (soapClientProperies.getStubEndPoint().equals(endpoint)) {
                 String cmpnCd = exchange.getRequest().getHeaders().getFirst(HeaderConstants.CMPN_CD);
@@ -158,7 +158,6 @@ public class SoapRequestHandler {
         }
     }
 
-
     private Mono<Void> writeResponse(ServerWebExchange exchange, ResponseStdVO response) {
         exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
         try {
@@ -175,12 +174,12 @@ public class SoapRequestHandler {
      */
     private Mono<Void> handleError(ServerWebExchange exchange, Throwable error) {
         log.error("Error processing SOAP request", error);
-        
+
         // HTTP 상태 코드 설정
         HttpStatus httpStatus = determineHttpStatus(error);
         exchange.getResponse().setStatusCode(httpStatus);
         exchange.getResponse().getHeaders().add(MediaTypes.HEADER_CONTENT_TYPE, MediaTypes.APPLICATION_JSON_UTF8);
-        
+
         // 에러 응답 생성
         try {
             String errorJson = createErrorJson(error);
@@ -192,7 +191,7 @@ public class SoapRequestHandler {
             return exchange.getResponse().setComplete();
         }
     }
-    
+
     private HttpStatus determineHttpStatus(Throwable error) {
         if (error instanceof InvalidRequestException) {
             return HttpStatus.BAD_REQUEST;
@@ -203,7 +202,7 @@ public class SoapRequestHandler {
         }
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
-    
+
     private String createErrorJson(Throwable error) throws Exception {
         Map<String, Object> errorResponse = new HashMap<>();
         errorResponse.put("error", error.getClass().getSimpleName());

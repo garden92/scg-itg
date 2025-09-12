@@ -1,4 +1,4 @@
-package com.kt.kol.common.util;
+package com.kt.kol.common.constant;
 
 public class DomainConstants {
 

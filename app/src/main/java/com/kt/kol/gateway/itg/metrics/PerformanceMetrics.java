@@ -3,7 +3,6 @@ package com.kt.kol.gateway.itg.metrics;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -17,7 +16,6 @@ import java.util.concurrent.atomic.AtomicLong;
  * - 에러율 및 처리량 추적
  */
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class PerformanceMetrics {
     

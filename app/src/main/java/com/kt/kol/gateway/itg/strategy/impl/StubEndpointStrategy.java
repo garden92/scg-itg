@@ -8,6 +8,7 @@ import com.kt.kol.common.model.SvcRequestInfoDTO;
 import com.kt.kol.gateway.itg.properties.HeaderConstants;
 import com.kt.kol.gateway.itg.properties.SoapServiceProperies;
 import com.kt.kol.gateway.itg.strategy.EndpointStrategy;
+import org.springframework.beans.factory.annotation.Value;
 
 import lombok.RequiredArgsConstructor;
 
@@ -42,6 +43,6 @@ public class StubEndpointStrategy implements EndpointStrategy {
     
     @Override
     public int getPriority() {
-        return 1; // 최고 우선순위
+        return 1; // B로 시작하면 무조건 Stub (성능테스트 우선)
     }
 }

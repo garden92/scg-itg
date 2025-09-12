@@ -1,6 +1,5 @@
 package com.kt.kol.gateway.itg.util;
 
-
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -26,13 +25,13 @@ import com.kt.kol.common.model.soap.SoapEnvelope;
 import com.kt.kol.common.model.soap.SoapHeader;
 import com.kt.kol.common.util.DateUtil;
 import com.kt.kol.common.util.JaxbXmlSerializer;
-import com.kt.kol.common.util.KosHeaderConstants;
 import com.kt.kol.gateway.itg.model.RequestStdVO;
 import com.kt.kol.gateway.itg.model.ResponseStdVO;
 import com.kt.kol.gateway.itg.properties.HeaderConstants;
 import com.kt.kol.gateway.itg.template.SoapTemplateManager;
 import com.kt.kol.gateway.itg.metrics.PerformanceMetrics;
 import com.kt.kol.common.constant.SoapConstants;
+import com.kt.kol.common.constant.KosHeaderConstants;
 import com.kt.kol.common.constant.ServiceConstants;
 import com.kt.kol.common.enums.ResponseType;
 import io.micrometer.core.instrument.Timer;
@@ -46,8 +45,8 @@ import lombok.extern.slf4j.Slf4j;
 public class SoapConverter {
 
     @Value("${kubernetes.node.ip}")
-	String nodeIp;
-    
+    String nodeIp;
+
     private final ObjectMapper objectMapper;
     private final XmlMapper xmlMapper;
     private final SoapTemplateManager soapTemplateManager;
@@ -74,7 +73,7 @@ public class SoapConverter {
         Timer.Sample sample = performanceMetrics.startXmlConversion();
         try {
             log.info("soapResponse ::: {}", soapResponse);
-            
+
             // 최적화: byte[] 직접 사용으로 InputStream 생성 오버헤드 제거
             byte[] responseBytes = soapResponse.getBytes(StandardCharsets.UTF_8);
             JsonNode jsonNode = xmlMapper.readTree(responseBytes);
@@ -83,7 +82,7 @@ public class SoapConverter {
 
             ResponseStdVO result;
             ResponseType responseTypeEnum = ResponseType.fromCodeOrDefault(responseType);
-            
+
             if (responseTypeEnum.isSuccess()) {
                 JsonNode responseData = extractResponseData(jsonNode);
                 result = ResponseStdVO.success(responseData);
@@ -104,10 +103,10 @@ public class SoapConverter {
                         commonHeader.path(SoapConstants.RESPONSE_DTAL).asText(),
                         commonHeader.path(SoapConstants.RESPONSE_SYSTEM).asText());
             }
-            
+
             performanceMetrics.recordXmlConversion(sample);
             return result;
-            
+
         } catch (Exception e) {
             // 최적화: 예외 메시지 간소화로 오버헤드 감소
             log.error("SOAP response conversion failed", e);
@@ -150,18 +149,18 @@ public class SoapConverter {
      */
     private CommonHeader extractHeaders(SvcRequestInfoDTO svcRequestInfoDTO, ServerWebExchange exchange) {
         HttpHeaders headers = exchange.getRequest().getHeaders();
-        
+
         // 최적화: 헤더 값들을 한 번에 추출하여 반복 접근 최소화
         String globalNo = headers.getFirst(HeaderConstants.GLOBAL_NO);
         String userId = headers.getFirst(HeaderConstants.USER_ID);
         String sourceId = headers.getFirst(HeaderConstants.SOURCE_ID);
         String cmpnCd = headers.getFirst(HeaderConstants.CMPN_CD);
         String lgDateTime = headers.getFirst(HeaderConstants.LOG_DATETIME);
-        
+
         // 최적화: Options Map 처리 개선 - null 체크 최소화
-        Map<String, String> options = svcRequestInfoDTO.options() != null 
-            ? svcRequestInfoDTO.options() 
-            : Map.of(); // 빈 Map 사용으로 NPE 방지
+        Map<String, String> options = svcRequestInfoDTO.options() != null
+                ? svcRequestInfoDTO.options()
+                : Map.of(); // 빈 Map 사용으로 NPE 방지
 
         // 최적화: lockTimeSt 계산 로직 간소화
         String lockId = options.getOrDefault(KosHeaderConstants.LOCK_ID, "");
@@ -210,13 +209,13 @@ public class SoapConverter {
             ObjectNode mergedJson = objectMapper.createObjectNode();
             mergedJson.set(SoapConstants.BIZ_HEADER, bizHeaderJson);
             mergedJson.setAll((ObjectNode) jsonNode);
-            final String xmlContent = xmlMapper.writer().withRootName(SoapConstants.SERVICE_REQUEST).writeValueAsString(mergedJson);
+            final String xmlContent = xmlMapper.writer().withRootName(SoapConstants.SERVICE_REQUEST)
+                    .writeValueAsString(mergedJson);
             return String.format(JaxbXmlSerializer.toXMLString(soapEnvelope), xmlContent);
         } catch (Exception e) {
             throw new RuntimeException(ServiceConstants.ERROR_CONVERSION_FAILED, e);
         }
     }
-
 
     private SoapEnvelope createSoapEnvelope(CommonHeader commonHeader) {
         SoapHeader header = new SoapHeader();
@@ -239,20 +238,21 @@ public class SoapConverter {
             bizHeader.setOrderId(requestStdVO.svcRequestInfoDTO().oderId());
             bizHeader.setCbSvcName(commonHeader.getSvcName());
             bizHeader.setCbFnName(commonHeader.getFnName());
-            
+
             JsonNode jsonNode = requestStdVO.data();
             JsonNode bizHeaderJson = objectMapper.valueToTree(bizHeader);
             ObjectNode mergedJson = objectMapper.createObjectNode();
             mergedJson.set(SoapConstants.BIZ_HEADER, bizHeaderJson);
             mergedJson.setAll((ObjectNode) jsonNode);
-            
-            final String xmlContent = xmlMapper.writer().withRootName(SoapConstants.SERVICE_REQUEST).writeValueAsString(mergedJson);
-            
+
+            final String xmlContent = xmlMapper.writer().withRootName(SoapConstants.SERVICE_REQUEST)
+                    .writeValueAsString(mergedJson);
+
             // 템플릿 매니저 사용으로 성능 향상
             String result = soapTemplateManager.generateSoapXml(commonHeader, xmlContent);
             performanceMetrics.recordTemplateGeneration(sample);
             return result;
-            
+
         } catch (Exception e) {
             performanceMetrics.recordTemplateGeneration(sample);
             log.error("Failed to convert with template, falling back to JAXB", e);
@@ -261,6 +261,5 @@ public class SoapConverter {
             return convertToXml(soapEnvelope, requestStdVO);
         }
     }
-
 
 }

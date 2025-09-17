@@ -1,44 +1,52 @@
 package com.kt.kol.gateway.itg.strategy.impl;
 
-import org.springframework.core.annotation.Order;
+import com.kt.kol.gateway.itg.properties.SoapServiceProperties;
+import com.kt.kol.gateway.itg.strategy.EndpointStrategy;
+import com.kt.kol.common.model.SvcRequestInfoDTO;
+import com.kt.kol.common.constant.DomainConstants;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 
-import com.kt.kol.common.constant.DomainConstants;
-import com.kt.kol.common.model.SvcRequestInfoDTO;
-import com.kt.kol.gateway.itg.properties.SoapServiceProperies;
-import com.kt.kol.gateway.itg.strategy.EndpointStrategy;
-
-import lombok.RequiredArgsConstructor;
-
 /**
- * CRM 도메인 엔드포인트 전략
- * CRM 관련 서비스의 PO/ESB 엔드포인트 결정
+ * CRM 서비스용 엔드포인트 전략
+ * PO (어플리케이션 대 어플리케이션) vs ESB 라우팅 결정
  */
 @Component
-@Order(3)
 @RequiredArgsConstructor
+@Slf4j
 public class CrmEndpointStrategy implements EndpointStrategy {
 
-    private final SoapServiceProperies soapServiceProperies;
+    private final SoapServiceProperties soapServiceProperies;
 
     @Override
     public boolean supports(String appName) {
-        return DomainConstants.CRM_DOMAIN_GROUP.contains(appName);
+        boolean result = DomainConstants.CRM_DOMAIN_GROUP.contains(appName);
+        log.debug("CrmEndpointStrategy.supports('{}') = {} (CRM_DOMAIN_GROUP: '{}')", 
+                 appName, result, DomainConstants.CRM_DOMAIN_GROUP);
+        return result;
     }
 
     @Override
     public String determineEndpoint(SvcRequestInfoDTO svcRequestInfo, HttpHeaders headers) {
         if (!supports(svcRequestInfo.appName())) {
+            log.debug("CrmEndpointStrategy.determineEndpoint: appName '{}' not supported", svcRequestInfo.appName());
             return null;
         }
 
         String serviceType = svcRequestInfo.fnName();
+        log.debug("CrmEndpointStrategy.determineEndpoint: serviceType='{}', fnName='{}'", 
+                 serviceType, svcRequestInfo.fnName());
 
         if ("service".equals(serviceType)) {
-            return soapServiceProperies.getCrmPoEndPoint();
+            String endpoint = soapServiceProperies.getCrmPoEndPoint();
+            log.debug("CrmEndpointStrategy: Using PO endpoint: {}", endpoint);
+            return endpoint;
         } else {
-            return soapServiceProperies.getCrmEsbEndPoint();
+            String endpoint = soapServiceProperies.getCrmEsbEndPoint();
+            log.debug("CrmEndpointStrategy: Using ESB endpoint: {}", endpoint);
+            return endpoint;
         }
     }
 

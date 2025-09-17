@@ -1,6 +1,6 @@
 package com.kt.kol.common.exception;
 
-public class BusinessExceptionWithReqeustBody extends RuntimeException {
+public class BusinessExceptionWithRequestBody extends RuntimeException {
 	/**
 	 * 
 	 */
@@ -18,33 +18,37 @@ public class BusinessExceptionWithReqeustBody extends RuntimeException {
 
 //	private EsbService esbService;
 
-	public BusinessExceptionWithReqeustBody() {
+	public BusinessExceptionWithRequestBody() {
 
 	}
 
-	public BusinessExceptionWithReqeustBody(String errorCode) {
+	public BusinessExceptionWithRequestBody(String errorCode) {
 		this.errorCode = errorCode;
 	}
 	
-	public BusinessExceptionWithReqeustBody(String errorCode, Object requestData) {
+	public BusinessExceptionWithRequestBody(String errorCode, Object requestData) {
 		this.errorCode = errorCode;
 		this.requestData = requestData;
 	}
 
-	public BusinessExceptionWithReqeustBody(String errorCode, String redirectUrl) {
+	public BusinessExceptionWithRequestBody(String errorCode, String redirectUrl) {
 		this.errorCode = errorCode;
 		this.redirectUrl = redirectUrl;
 	}
 
-	public BusinessExceptionWithReqeustBody(String errorCode, String[] errorArgsMsg) {
+	public BusinessExceptionWithRequestBody(String errorCode, String[] errorArgsMsg) {
 		this.errorCode = errorCode;
 		this.errorArgsMsg = errorArgsMsg;
 	}
 
-	public BusinessExceptionWithReqeustBody(String errorCode, String[] errorArgsMsg, String redirectUrl) {
+	public BusinessExceptionWithRequestBody(String errorCode, String[] errorArgsMsg, String redirectUrl) {
 		this.errorCode = errorCode;
 		this.errorArgsMsg = errorArgsMsg;
 		this.redirectUrl = redirectUrl;
+	}
+	
+	public BusinessExceptionWithRequestBody(String message, Throwable cause) {
+		super(message, cause);
 	}
 
 //	public BusinessException(EsbService esbService, String errorCode) {

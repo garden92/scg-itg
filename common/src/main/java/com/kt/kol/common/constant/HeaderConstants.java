@@ -1,4 +1,4 @@
-package com.kt.kol.gateway.itg.properties;
+package com.kt.kol.common.constant;
 
 public final class HeaderConstants {
 
@@ -29,7 +29,7 @@ public final class HeaderConstants {
     public static final String SOURCE_ID = "KOL-Src-Id";
     public static final String CMPN_CD = "KOL-Cmpn-Cd";
     public static final String LOG_DATETIME = "KOL-Lg-Date-Time";
-    public static final String ORI_IP = "KOL-Ori-IP";  // 최초 RemoteAddr 보관
+    public static final String ORI_IP = "KOL-Ori-IP"; // 최초 RemoteAddr 보관
 
     // ====== Prevent Instantiation ======
     private HeaderConstants() {

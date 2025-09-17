@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 
 import com.kt.kol.common.constant.DomainConstants;
 import com.kt.kol.common.model.SvcRequestInfoDTO;
-import com.kt.kol.gateway.itg.properties.SoapServiceProperies;
+import com.kt.kol.gateway.itg.properties.SoapServiceProperties;
 import com.kt.kol.gateway.itg.strategy.EndpointStrategy;
 
 import lombok.RequiredArgsConstructor;
@@ -20,7 +20,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class OrdEndpointStrategy implements EndpointStrategy {
 
-    private final SoapServiceProperies soapServiceProperies;
+    private final SoapServiceProperties soapServiceProperies;
 
     @Override
     public boolean supports(String appName) {

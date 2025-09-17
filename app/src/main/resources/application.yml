@@ -1,16 +1,10 @@
 spring:
   application:
     name: kol-itg-gateway
-
-# 기능 플래그 설정 - 점진적 마이그레이션
-feature:
-  use-optimized-handler: false # 새로운 서비스 사용 여부 (기본: false)
   profiles:
-    active: local
-  # data: REDIS 5월에 구축 되면 사용
-  #   redis:
-  #     host: localhost
-  #     port: 6379
+    active: mock
+
+# 기본 서버 설정 (프로파일별로 오버라이드됨)
 server:
   port: 8080
 
@@ -22,8 +16,8 @@ webclient:
 
 kubernetes:
   node:
-    ip: ${NODE_IP}
-    name: ${NODE_NAME}
+    ip: ${NODE_IP:localhost}
+    name: ${NODE_NAME:local-node}
 
 management:
   endpoints:
@@ -32,7 +26,7 @@ management:
         include: "*"
   endpoint:
     shutdown:
-      enabled: true
+      access: unrestricted
     health:
       show-details: always
   health:
@@ -45,9 +39,7 @@ spring:
     activate:
       on-profile: local
 
-# local 환경에서는 새로운 서비스 활성화 (테스트용)
 feature:
-  use-optimized-handler: true
   devtools:
     restart:
       enabled: true
@@ -71,9 +63,6 @@ resilience4j.circuitbreaker:
   instances:
     testcirguitbreaker:
       baseConfig: default
-
-    # redis:
-    #   enabled: true
 
 logging:
   config: classpath:logback-spring-dev.xml
@@ -228,3 +217,34 @@ logging:
   file:
     name: itg-gw
     path: /var/log
+
+---
+# Profile - mock (Mock 서버와 연동)
+spring:
+  config:
+    activate:
+      on-profile: mock
+
+# Mock 서버 환경 설정
+server:
+  port: 8080
+
+webclient:
+  connection-timeout: 3000
+  read-timeout: 10000
+  write-timeout: 5000
+
+# Mock 서버 SOAP 엔드포인트 (동적으로 설정됨)
+soap:
+  service:
+    ord-po-end-point: http://localhost:8888/SoapDynamicGateway
+    ord-esb-end-point: http://localhost:8888/SoapGateway
+    crm-po-end-point: http://localhost:8889/SoapDynamicGateway
+    crm-esb-end-point: http://localhost:8889/SoapGateway
+    stub-end-point: http://localhost:8890/soap-perf-stub
+
+logging:
+  level:
+    com.kt.kol: DEBUG
+    org.springframework.cloud.gateway: DEBUG
+    root: INFO

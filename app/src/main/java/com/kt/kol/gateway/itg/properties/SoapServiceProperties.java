@@ -10,11 +10,11 @@ import lombok.Setter;
 @Setter
 @Configuration
 @ConfigurationProperties(prefix = "soap.service")
-public class SoapServiceProperies {
+public class SoapServiceProperties {
     private String ordPoEndPoint;
     private String ordEsbEndPoint;
     private String crmPoEndPoint;
     private String crmEsbEndPoint;
-    private String stubEndPoint;    //성능테스트 임시
+    private String stubEndPoint; // 성능테스트 임시
     private long timeout = 80000;
 }

@@ -1,29 +1,26 @@
 package com.kt.kol.gateway.itg.config;
 
 import java.time.Duration;
-import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLException;
-
-import io.netty.channel.ChannelOption;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.web.reactive.function.client.ClientRequest;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import com.kt.kol.gateway.itg.properties.WebClientProperties;
-import com.kt.kol.common.constant.MediaTypes;
 
+import io.netty.channel.ChannelOption;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
-import io.netty.handler.timeout.ReadTimeoutHandler;
-import io.netty.handler.timeout.WriteTimeoutHandler;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
@@ -33,80 +30,110 @@ import reactor.netty.resources.ConnectionProvider;
 @EnableConfigurationProperties(WebClientProperties.class)
 @Slf4j
 public class WebClientConfig {
-	private SslContext sslContext;
 
 	@Bean
-	public WebClient webClient(WebClientProperties webClientProperties) {
+	@Profile("dev")
+	SslContext devSslContext() {
 		try {
-			sslContext = SslContextBuilder.forClient()
+			return SslContextBuilder.forClient()
 					.trustManager(InsecureTrustManagerFactory.INSTANCE)
 					.build();
 		} catch (SSLException e) {
-			log.error("SSL Context creation failed", e);
-			throw new RuntimeException("Failed to create SSL context", e);
+			throw new IllegalStateException("Dev SSL context failed", e);
 		}
+	}
 
-		// 최적화된 커넥션 풀 설정 - 환경별 동적 조정
-		ConnectionProvider connectionProvider = ConnectionProvider.builder("optimized-soap-client")
-				.maxConnections(Math.min(500, Runtime.getRuntime().availableProcessors() * 50)) // CPU 기반 동적 조정
-				.maxIdleTime(Duration.ofSeconds(30)) // idle 시간 최적화
-				.maxLifeTime(Duration.ofMinutes(5)) // 연결 재사용 시간 증가
-				.pendingAcquireMaxCount(200) // 대기 큐 크기 증가
-				.evictInBackground(Duration.ofSeconds(60)) // 정리 주기 최적화
-				.fifo() // FIFO 순서로 연결 재사용
-				.metrics(true) // 메트릭 활성화
+	@Bean
+	@Profile("!dev")
+	SslContext prodSslContext() throws SSLException {
+		// 기본 JDK 신뢰 스토어 사용(필요시 커스텀 TrustManager)
+		return SslContextBuilder.forClient().build();
+	}
+
+	@Bean
+	public WebClient webClient(
+			WebClientProperties props,
+			SslContext sslContext) {
+
+		ConnectionProvider provider = ConnectionProvider.builder("soap-client")
+				// 보수적으로 시작. 운영서버·백엔드 지연 고려해 점진 조정
+				.maxConnections(Math.min(100, Runtime.getRuntime().availableProcessors() * 10))
+				.pendingAcquireMaxCount(100)
+				.maxIdleTime(Duration.ofSeconds(30))
+				.maxLifeTime(Duration.ofMinutes(5))
+				// LIFO 기본값 유지(= 더 나은 캐시 현행화/지연 감소)
+				.metrics(true)
+				.evictInBackground(Duration.ofSeconds(60))
 				.build();
 
-		HttpClient httpClient = HttpClient.create(connectionProvider)
+		HttpClient httpClient = HttpClient.create(provider)
 				.option(ChannelOption.SO_KEEPALIVE, true)
 				.option(ChannelOption.TCP_NODELAY, true)
-				.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) webClientProperties.getConnectionTimeout()) // 연결
-																												// 타임아웃
-																												// 설정
-				.secure(sslSpec -> sslSpec.sslContext(sslContext))
-				.responseTimeout(Duration.ofMillis(webClientProperties.getReadTimeout())) // 전체 응답 타임아웃
-				.doOnConnected(conn -> conn
-						.addHandlerLast(
-								new ReadTimeoutHandler(
-										webClientProperties.getReadTimeout(),
-										TimeUnit.MILLISECONDS))
-						.addHandlerLast(
-								new WriteTimeoutHandler(
-										webClientProperties.getWriteTimeout(),
-										TimeUnit.MILLISECONDS)))
-				.compress(true); // HTTP 압축 활성화
+				.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) props.getConnectionTimeout())
+				.secure(ssl -> ssl.sslContext(sslContext))
+				// 헤더 수신까지의 타임아웃. 바디 전체 제한은 per-request 권장
+				.responseTimeout(Duration.ofMillis(props.getReadTimeout()))
+				// 필요할 때만 켜라(디버깅)
+				// .wiretap("reactor.netty.http.client.HttpClient", LogLevel.DEBUG,
+				// AdvancedByteBufFormat.TEXTUAL)
+				// Netty Read/WriteTimeoutHandler는 기본 끔(필요시 per-route 적용)
+				.compress(true)
+				// 큰 헤더/라인 대응(필요 시)
+				.httpResponseDecoder(decoder -> decoder
+						.maxInitialLineLength(8192)
+						.maxHeaderSize(32 * 1024)
+						.validateHeaders(true));
 
 		return WebClient.builder()
-				.codecs(configurer -> {
-					// 메모리 버퍼 크기 최적화 - SOAP 메시지 크기 고려
-					configurer.defaultCodecs().maxInMemorySize(10 * 1024 * 1024); // 10MB로 증가
-					// Jackson 설정 최적화
-					configurer.defaultCodecs().enableLoggingRequestDetails(false); // 운영 환경 로깅 최적화
-				})
 				.clientConnector(new ReactorClientHttpConnector(httpClient))
-				.defaultHeaders(headers -> headers.set(HttpHeaders.CONTENT_TYPE, MediaTypes.TEXT_XML))
-				// 로깅 필터 성능 최적화
-				.filter(this.createOptimizedLoggingFilter())
+				.defaultHeaders(h -> {
+					// 공통 헤더(추적용). Content-Type은 요청 빌드 시 넣기
+					h.add("X-Correlation-Id", java.util.UUID.randomUUID().toString());
+					h.set(HttpHeaders.ACCEPT, MediaType.TEXT_XML_VALUE);
+				})
+				.codecs(c -> {
+					c.defaultCodecs().maxInMemorySize(10 * 1024 * 1024); // 10MB
+					c.defaultCodecs().enableLoggingRequestDetails(false);
+				})
+				.filter(loggingFilter()) // 개선된 로깅 필터
+				.filter(correlationIdPropagator()) // MDC/헤더 전파
 				.build();
 	}
 
-	/**
-	 * 성능 최적화된 로깅 필터
-	 * 기존 대비 15% 오버헤드 감소
-	 */
-	private ExchangeFilterFunction createOptimizedLoggingFilter() {
-		return ExchangeFilterFunction.ofRequestProcessor(clientRequest -> {
-			// 운영 환경에서는 상세 로깅 제한
+	private ExchangeFilterFunction loggingFilter() {
+		return ExchangeFilterFunction.ofRequestProcessor(req -> {
 			if (log.isDebugEnabled()) {
-				log.debug("SOAP Request: {} {}", clientRequest.method(), clientRequest.url());
+				log.debug("[REQ] {} {} headers={}", req.method(), req.url(), redacted(req.headers()));
 			}
-			return Mono.just(clientRequest);
-		}).andThen(ExchangeFilterFunction.ofResponseProcessor(clientResponse -> {
+			return Mono.just(req);
+		}).andThen(ExchangeFilterFunction.ofResponseProcessor(res -> {
 			if (log.isDebugEnabled()) {
-				log.debug("SOAP Response: {}", clientResponse.statusCode());
+				log.debug("[RES] {} headers={}", res.statusCode(), redacted(res.headers().asHttpHeaders()));
 			}
-			return Mono.just(clientResponse);
+			return Mono.just(res);
 		}));
 	}
 
+	private java.util.Map<String, java.util.List<String>> redacted(HttpHeaders headers) {
+		HttpHeaders copy = new HttpHeaders();
+		copy.addAll(headers);
+		// 민감 헤더 마스킹
+		if (copy.containsKey(HttpHeaders.AUTHORIZATION)) {
+			copy.set(HttpHeaders.AUTHORIZATION, "***");
+		}
+		return copy;
+	}
+
+	private ExchangeFilterFunction correlationIdPropagator() {
+		return ExchangeFilterFunction.ofRequestProcessor(req -> {
+			String cid = req.headers().getFirst("X-Correlation-Id");
+			if (cid == null) {
+				cid = java.util.UUID.randomUUID().toString();
+				return Mono.just(ClientRequest.from(req)
+						.header("X-Correlation-Id", cid)
+						.build());
+			}
+			return Mono.just(req);
+		});
+	}
 }

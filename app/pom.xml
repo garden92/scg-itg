@@ -71,13 +71,6 @@
 			<groupId>com.squareup.okhttp3</groupId>
 			<artifactId>mockwebserver</artifactId>
 		</dependency>
-		
-		<!-- Jakarta EE Annotation API for Spring Boot 3.x -->
-		<dependency>
-			<groupId>jakarta.annotation</groupId>
-			<artifactId>jakarta.annotation-api</artifactId>
-		</dependency>
-		
 
 	</dependencies>
 	

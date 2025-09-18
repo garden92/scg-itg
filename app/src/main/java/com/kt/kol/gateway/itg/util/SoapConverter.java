@@ -71,7 +71,7 @@ public class SoapConverter {
     public ResponseStdVO convertToStdVO(String soapResponse) {
         Timer.Sample sample = performanceMetrics.startXmlConversion();
         try {
-            log.info("soapResponse ::: {}", soapResponse);
+            log.debug("SOAP response received, length: {} chars", soapResponse.length());
 
             // 최적화: byte[] 직접 사용으로 InputStream 생성 오버헤드 제거
             byte[] responseBytes = soapResponse.getBytes(StandardCharsets.UTF_8);

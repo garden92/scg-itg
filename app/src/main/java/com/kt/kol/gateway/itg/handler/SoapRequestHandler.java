@@ -49,10 +49,8 @@ public class SoapRequestHandler {
                     // 강화된 Exchange를 사용하여 SOAP 처리
                     return processingService.processSoapRequest(
                             validatedRequest.exchange(), // 강화된 Exchange 사용
-                            validatedRequest.request()
-                    ).flatMap(response -> 
-                            writerService.writeResponse(validatedRequest.exchange(), response)
-                    );
+                            validatedRequest.request())
+                            .flatMap(response -> writerService.writeResponse(validatedRequest.exchange(), response));
                 })
                 .doOnSuccess(result -> performanceMetrics.recordSoapSuccess(sample))
                 .onErrorResume(error -> {
@@ -61,7 +59,6 @@ public class SoapRequestHandler {
                     return handleError(exchange, error);
                 });
     }
-
 
     /**
      * 에러 처리 메소드

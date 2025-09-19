@@ -7,39 +7,43 @@ import org.springframework.context.annotation.Primary;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.cfg.CoercionAction;
+import com.fasterxml.jackson.databind.cfg.CoercionInputShape;
+import com.fasterxml.jackson.databind.type.LogicalType;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-import com.fasterxml.jackson.dataformat.xml.ser.ToXmlGenerator.Feature;
 
-/**
- * JSON/XML 처리를 위한 싱글톤 Mapper 설정
- * 메모리 사용량 85% 감소 효과 (14MB → 2MB per request)
- */
 @Configuration
 public class JsonConfig {
-    
-    /**
-     * 범용 JSON 처리용 ObjectMapper
-     * - FAIL_ON_UNKNOWN_PROPERTIES: false (유연한 JSON 파싱)
-     * - FAIL_ON_EMPTY_BEANS: false (빈 객체 직렬화 허용)
-     */
+
     @Bean
     @Primary
     public ObjectMapper objectMapper() {
-        return new ObjectMapper()
-                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-                .configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false)
-                .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+        ObjectMapper mapper = com.fasterxml.jackson.databind.json.JsonMapper.builder()
+                .addModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+                .addModule(new com.fasterxml.jackson.module.blackbird.BlackbirdModule())
+                .build();
+
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+        mapper.configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, false);
+        mapper.coercionConfigFor(LogicalType.POJO)
+                .setCoercion(CoercionInputShape.EmptyString, CoercionAction.AsNull);
+        return mapper;
     }
-    
-    /**
-     * XML 처리 전용 XmlMapper
-     * - WRITE_XML_DECLARATION: false (XML 선언부 제거)
-     */
+
     @Bean
     public XmlMapper xmlMapper() {
-        return XmlMapper.builder()
-                .configure(Feature.WRITE_XML_DECLARATION, false)
+        XmlMapper xml = XmlMapper.builder()
+                .addModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+                .addModule(new com.fasterxml.jackson.module.blackbird.BlackbirdModule())
+                .configure(com.fasterxml.jackson.dataformat.xml.ser.ToXmlGenerator.Feature.WRITE_XML_DECLARATION, false)
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
                 .build();
+
+        // JSON과 동일한 coercion 정책 유지(필요 시)
+        xml.coercionConfigFor(LogicalType.POJO)
+                .setCoercion(CoercionInputShape.EmptyString, CoercionAction.AsNull);
+        return xml;
     }
+
 }

@@ -43,8 +43,7 @@ public class SoapProcessingService {
                     exchange.getRequest().getHeaders());
             log.debug("Processing SOAP request to endpoint: {}", endpoint);
             return new SoapRequestContext(soapRequest, endpoint);
-        })
-                .subscribeOn(Schedulers.boundedElastic()) // CPU 집약적 작업을 별도 스레드에서
+        }).subscribeOn(Schedulers.boundedElastic()) // CPU 집약적 작업을 별도 스레드에서
                 .flatMap(context -> executeSoapCall(context, exchange))
                 .map(soapConverter::convertToStdVO)
                 .timeout(Duration.ofMillis(soapServiceProperties.getTimeout()))

@@ -18,24 +18,17 @@
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<java.version>17</java.version>
-		<maven-jar-plugin.version>3.1.1</maven-jar-plugin.version>
-		<lib.external.dir>${basedir}/src/main/resources/lib</lib.external.dir>
 		<spring-cloud.version>2025.0.0</spring-cloud.version>
+		
+		<jackson.version>2.18.2</jackson.version>
+		<lombok.version>1.18.36</lombok.version>
+		<mockwebserver.version>4.12.0</mockwebserver.version>
 	</properties>
 
-	<repositories>
-		<repository>
-			<id>local-repo</id>
-			<name>local Repository</name>
-			<url>file://${project.basedir}/lib/</url>
-		</repository>
-	</repositories>
 
 	<modules>
 		<module>app</module>
-		<!-- <module>batch-scheduler</module>-->
 		<module>common</module> 
 	</modules>
 	
@@ -48,6 +41,59 @@
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
+			
+			<!-- Jackson 모듈 버전 관리 -->
+			<dependency>
+				<groupId>com.fasterxml.jackson.module</groupId>
+				<artifactId>jackson-module-blackbird</artifactId>
+				<version>${jackson.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.fasterxml.jackson.dataformat</groupId>
+				<artifactId>jackson-dataformat-xml</artifactId>
+				<version>${jackson.version}</version>
+			</dependency>
+			
+			<!-- Lombok -->
+			<dependency>
+				<groupId>org.projectlombok</groupId>
+				<artifactId>lombok</artifactId>
+				<version>${lombok.version}</version>
+				<optional>true</optional>
+			</dependency>
+			
+			<!-- MockWebServer for Mock SOAP Server -->
+			<dependency>
+				<groupId>com.squareup.okhttp3</groupId>
+				<artifactId>mockwebserver</artifactId>
+				<version>${mockwebserver.version}</version>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
+	
+	<build>
+		<pluginManagement>
+			<plugins>
+				<!-- OWASP Dependency Check Plugin for Security Scanning -->
+				<plugin>
+					<groupId>org.owasp</groupId>
+					<artifactId>dependency-check-maven</artifactId>
+					<version>11.1.1</version>
+					<configuration>
+						<failBuildOnCVSS>8</failBuildOnCVSS>
+						<suppressionFiles>
+							<suppressionFile>owasp-suppressions.xml</suppressionFile>
+						</suppressionFiles>
+					</configuration>
+					<executions>
+						<execution>
+							<goals>
+								<goal>check</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
+			</plugins>
+		</pluginManagement>
+	</build>
 </project>

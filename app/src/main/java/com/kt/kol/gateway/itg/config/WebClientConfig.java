@@ -56,12 +56,10 @@ public class WebClientConfig {
 			SslContext sslContext) {
 
 		ConnectionProvider provider = ConnectionProvider.builder("soap-client")
-				// 보수적으로 시작. 운영서버·백엔드 지연 고려해 점진 조정
 				.maxConnections(Math.min(100, Runtime.getRuntime().availableProcessors() * 10))
 				.pendingAcquireMaxCount(100)
 				.maxIdleTime(Duration.ofSeconds(30))
 				.maxLifeTime(Duration.ofMinutes(5))
-				// LIFO 기본값 유지(= 더 나은 캐시 현행화/지연 감소)
 				.metrics(true)
 				.evictInBackground(Duration.ofSeconds(60))
 				.build();
@@ -70,15 +68,9 @@ public class WebClientConfig {
 				.option(ChannelOption.SO_KEEPALIVE, true)
 				.option(ChannelOption.TCP_NODELAY, true)
 				.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) props.getConnectionTimeout())
-				.secure(ssl -> ssl.sslContext(sslContext))
-				// 헤더 수신까지의 타임아웃. 바디 전체 제한은 per-request 권장
 				.responseTimeout(Duration.ofMillis(props.getReadTimeout()))
-				// 필요할 때만 켜라(디버깅)
-				// .wiretap("reactor.netty.http.client.HttpClient", LogLevel.DEBUG,
-				// AdvancedByteBufFormat.TEXTUAL)
-				// Netty Read/WriteTimeoutHandler는 기본 끔(필요시 per-route 적용)
+				.secure(ssl -> ssl.sslContext(sslContext))
 				.compress(true)
-				// 큰 헤더/라인 대응(필요 시)
 				.httpResponseDecoder(decoder -> decoder
 						.maxInitialLineLength(8192)
 						.maxHeaderSize(32 * 1024)
@@ -103,25 +95,15 @@ public class WebClientConfig {
 	private ExchangeFilterFunction loggingFilter() {
 		return ExchangeFilterFunction.ofRequestProcessor(req -> {
 			if (log.isDebugEnabled()) {
-				log.debug("[REQ] {} {} headers={}", req.method(), req.url(), redacted(req.headers()));
+				log.debug("[REQ] {} {} headers={}", req.method(), req.url(), req.headers());
 			}
 			return Mono.just(req);
 		}).andThen(ExchangeFilterFunction.ofResponseProcessor(res -> {
 			if (log.isDebugEnabled()) {
-				log.debug("[RES] {} headers={}", res.statusCode(), redacted(res.headers().asHttpHeaders()));
+				log.debug("[RES] {} headers={}", res.statusCode(), res.headers().asHttpHeaders());
 			}
 			return Mono.just(res);
 		}));
-	}
-
-	private java.util.Map<String, java.util.List<String>> redacted(HttpHeaders headers) {
-		HttpHeaders copy = new HttpHeaders();
-		copy.addAll(headers);
-		// 민감 헤더 마스킹
-		if (copy.containsKey(HttpHeaders.AUTHORIZATION)) {
-			copy.set(HttpHeaders.AUTHORIZATION, "***");
-		}
-		return copy;
 	}
 
 	private ExchangeFilterFunction correlationIdPropagator() {

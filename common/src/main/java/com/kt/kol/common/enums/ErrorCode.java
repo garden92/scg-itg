@@ -1,4 +1,4 @@
-package com.kt.kol.common.constant;
+package com.kt.kol.common.enums;
 
 import lombok.Getter;
 

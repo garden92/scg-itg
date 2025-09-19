@@ -7,7 +7,7 @@ public class BusinessExceptionWithRequestBody extends RuntimeException {
 	private static final long serialVersionUID = 9046421649816246882L;
 
 	private Object requestData;
-	
+
 	/** 에러코드 */
 	private String errorCode;
 
@@ -16,7 +16,7 @@ public class BusinessExceptionWithRequestBody extends RuntimeException {
 
 	private String[] errorArgsMsg;
 
-//	private EsbService esbService;
+	// private EsbService esbService;
 
 	public BusinessExceptionWithRequestBody() {
 
@@ -25,7 +25,7 @@ public class BusinessExceptionWithRequestBody extends RuntimeException {
 	public BusinessExceptionWithRequestBody(String errorCode) {
 		this.errorCode = errorCode;
 	}
-	
+
 	public BusinessExceptionWithRequestBody(String errorCode, Object requestData) {
 		this.errorCode = errorCode;
 		this.requestData = requestData;
@@ -46,39 +46,42 @@ public class BusinessExceptionWithRequestBody extends RuntimeException {
 		this.errorArgsMsg = errorArgsMsg;
 		this.redirectUrl = redirectUrl;
 	}
-	
+
 	public BusinessExceptionWithRequestBody(String message, Throwable cause) {
 		super(message, cause);
 	}
 
-//	public BusinessException(EsbService esbService, String errorCode) {
-//		this.esbService = esbService;
-//		this.errorCode = errorCode;
-//	}
-//
-//	public BusinessException(EsbService esbService, String errorCode, String redirectUrl) {
-//		this.esbService = esbService;
-//		this.errorCode = errorCode;
-//		this.redirectUrl = redirectUrl;
-//	}
-//
-//	public BusinessException(EsbService esbService, String errorCode, String[] errorArgsMsg) {
-//		this.esbService = esbService;
-//		this.errorCode = errorCode;
-//		this.errorArgsMsg = errorArgsMsg;
-//	}
-//
-//	public BusinessException(EsbService esbService, String errorCode, String[] errorArgsMsg, String redirectUrl) {
-//		this.esbService = esbService;
-//		this.errorCode = errorCode;
-//		this.errorArgsMsg = errorArgsMsg;
-//		this.redirectUrl = redirectUrl;
-//	}
+	// public BusinessException(EsbService esbService, String errorCode) {
+	// this.esbService = esbService;
+	// this.errorCode = errorCode;
+	// }
+	//
+	// public BusinessException(EsbService esbService, String errorCode, String
+	// redirectUrl) {
+	// this.esbService = esbService;
+	// this.errorCode = errorCode;
+	// this.redirectUrl = redirectUrl;
+	// }
+	//
+	// public BusinessException(EsbService esbService, String errorCode, String[]
+	// errorArgsMsg) {
+	// this.esbService = esbService;
+	// this.errorCode = errorCode;
+	// this.errorArgsMsg = errorArgsMsg;
+	// }
+	//
+	// public BusinessException(EsbService esbService, String errorCode, String[]
+	// errorArgsMsg, String redirectUrl) {
+	// this.esbService = esbService;
+	// this.errorCode = errorCode;
+	// this.errorArgsMsg = errorArgsMsg;
+	// this.redirectUrl = redirectUrl;
+	// }
 
 	public String getErrorCode() {
 		return this.errorCode;
 	}
-	
+
 	public Object getRequestData() {
 		return this.requestData;
 	}
@@ -104,12 +107,12 @@ public class BusinessExceptionWithRequestBody extends RuntimeException {
 		this.redirectUrl = redirectUrl;
 	}
 
-//	public EsbService getEsbService() {
-//		return esbService;
-//	}
-//
-//	public void setEsbService(EsbService esbService) {
-//		this.esbService = esbService;
-//	}
+	// public EsbService getEsbService() {
+	// return esbService;
+	// }
+	//
+	// public void setEsbService(EsbService esbService) {
+	// this.esbService = esbService;
+	// }
 
 }
